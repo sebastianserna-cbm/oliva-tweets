@@ -412,7 +412,7 @@ export const Chat = memo(({ stopConversationRef }: Props) => {
                         <Spinner size="16px" className="mx-auto" />
                       </div>
                     ) : (
-                      'Finetunning Tweets!'
+                      'Olivia Finetunning Tweets!'
 
                     )}
                     <div className="flex justify-center items-center">

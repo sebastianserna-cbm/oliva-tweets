@@ -362,7 +362,7 @@ const Home = ({
       }}
     >
       <Head>
-        <title>Tweets - Finetunning AI</title>
+        <title>Olivia Tweets - Finetunning AI</title>
         <meta name="description" content="ChatGPT but better." />
         <link rel="icon" type="image/svg+xml" href={chabotMeta.src} />
         <meta
