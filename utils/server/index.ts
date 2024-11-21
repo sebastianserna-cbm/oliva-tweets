@@ -26,7 +26,7 @@ export class OpenAIError extends Error {
 export const OpenAIStream = async (
   model: OpenAIModel,
   systemPrompt: string,
-  temperature: number,
+  temperature : number,
   key: string,
   messages: Message[],
 ) => {
@@ -34,57 +34,86 @@ export const OpenAIStream = async (
   if (OPENAI_API_TYPE === 'azure') {
     url = `${OPENAI_API_HOST}/openai/deployments/${AZURE_DEPLOYMENT_ID}/chat/completions?api-version=${OPENAI_API_VERSION}`;
   }
+  const res = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(OPENAI_API_TYPE === 'openai' && {
+        //Authorization: `Bearer ${key ? key : process.env.OPENAI_API_KEY}`
+        Authorization: process.env.API_TOKEN
+      }),
+      ...(OPENAI_API_TYPE === 'azure' && {
+        'api-key': `${key ? key : process.env.OPENAI_API_KEY}`
+      }),
+      ...((OPENAI_API_TYPE === 'openai' && OPENAI_ORGANIZATION) && {
+        'OpenAI-Organization': OPENAI_ORGANIZATION,
+      }),
+    },
+    method: 'POST',
+    body: JSON.stringify({
+      ...(OPENAI_API_TYPE === 'openai' && {model: model.id}),
+      messages: [
+        {
+          role: 'system',
+          content: systemPrompt,
+        },
+        ...messages,
+      ],
+      max_tokens: 5000,
+      temperature: temperature,
+      stream: false,
+    }),
+  });
 
-  // Validate and sanitize messages
-  const sanitizedMessages = messages.map((msg) => ({
-    role: msg.role,
-    content: msg.content?.replace(/[\r\n\t]/g, '').trim(), // Remove problematic characters
-  }));
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+  const result = await res.json();
 
-  const requestBody = {
-    ...(OPENAI_API_TYPE === 'openai' && { model: model.id }),
-    messages: [
-      {
-        role: 'system',
-        content: systemPrompt,
-      },
-      ...sanitizedMessages,
-    ],
-    max_tokens: 5000,
-    temperature,
-    stream: false,
-  };
+  // if (res.status !== 200) {
+  //   const result = await res.json();
+  //   if (result.error) {
+  //     throw new OpenAIError(
+  //       result.error.message,
+  //       result.error.type,
+  //       result.error.param,
+  //       result.error.code,
+  //     );
+  //   } else {
+  //     throw new Error(
+  //       `OpenAI API returned an error: ${
+  //         decoder.decode(result?.value) || result.statusText
+  //       }`,
+  //     );
+  //   }
+  // }
 
-  try {
-    const res = await fetch(url, {
-      headers: {
-        'Content-Type': 'application/json',
-        ...(OPENAI_API_TYPE === 'openai' && {
-          Authorization: `Bearer ${key || process.env.OPENAI_API_KEY}`,
-        }),
-        ...(OPENAI_API_TYPE === 'azure' && {
-          'api-key': `${key || process.env.OPENAI_API_KEY}`,
-        }),
-        ...(OPENAI_API_TYPE === 'openai' && OPENAI_ORGANIZATION && {
-          'OpenAI-Organization': OPENAI_ORGANIZATION,
-        }),
-      },
-      method: 'POST',
-      body: JSON.stringify(requestBody),
-    });
+  // const stream = new ReadableStream({
+  //   async start(controller) {
+  //     const onParse = (event: ParsedEvent | ReconnectInterval) => {
+  //       if (event.type === 'event') {
+  //         const data = event.data;
 
-    if (!res.ok) {
-      const errorResponse = await res.text();
-      throw new Error(
-        `Failed to fetch: ${res.status} ${res.statusText}\n${errorResponse}`
-      );
-    }
+  //         try {
+  //           const json = JSON.parse(data);
+  //           if (json.choices[0].finish_reason != null) {
+  //             controller.close();
+  //             return;
+  //           }
+  //           const text = json.choices[0].delta.content;
+  //           const queue = encoder.encode(text);
+  //           controller.enqueue(queue);
+  //         } catch (e) {
+  //           controller.error(e);
+  //         }
+  //       }
+  //     };
 
-    const result = await res.json();
-    return result.response;
+  //     const parser = createParser(onParse);
 
-  } catch (error) {
-    console.error('Error in OpenAIStream:', error.message);
-    throw error;
-  }
+  //     for await (const chunk of res.body as any) {
+  //       parser.feed(decoder.decode(chunk));
+  //     }
+  //   },
+  // });
+
+  return result["response"];
 };
