@@ -1,13 +1,13 @@
 import { Message } from '@/types/chat';
 import { OpenAIModel } from '@/types/openai';
 
-import { AZURE_DEPLOYMENT_ID, OPENAI_API_HOST, OPENAI_API_TYPE, OPENAI_API_VERSION, OPENAI_ORGANIZATION } from '../app/const';
-
 import {
-  ParsedEvent,
-  ReconnectInterval,
-  createParser,
-} from 'eventsource-parser';
+  AZURE_DEPLOYMENT_ID,
+  OPENAI_API_HOST,
+  OPENAI_API_TYPE,
+  OPENAI_API_VERSION,
+  OPENAI_ORGANIZATION,
+} from '../app/const';
 
 export class OpenAIError extends Error {
   type: string;
@@ -35,10 +35,9 @@ export const OpenAIStream = async (
     url = `${OPENAI_API_HOST}/openai/deployments/${AZURE_DEPLOYMENT_ID}/chat/completions?api-version=${OPENAI_API_VERSION}`;
   }
 
-  // Validate and sanitize messages
   const sanitizedMessages = messages.map((msg) => ({
     role: msg.role,
-    content: msg.content?.replace(/[\r\n\t]/g, '').trim(), // Remove problematic characters
+    content: msg.content?.replace(/[\r\n\t]/g, '').trim(),
   }));
 
   const requestBody = {
@@ -73,16 +72,19 @@ export const OpenAIStream = async (
       body: JSON.stringify(requestBody),
     });
 
+    const rawText = await res.text();
+    console.log('Raw response:', rawText);
+
     if (!res.ok) {
-      const errorResponse = await res.text();
-      throw new Error(
-        `Failed to fetch: ${res.status} ${res.statusText}\n${errorResponse}`
-      );
+      throw new Error(`Failed to fetch: ${res.status} ${res.statusText}\n${rawText}`);
     }
 
-    const result = await res.json();
-    return result.response;
-
+    try {
+      const result = JSON.parse(rawText);
+      return result.response;
+    } catch (jsonError) {
+      throw new Error(`Invalid JSON response: ${rawText}`);
+    }
   } catch (error) {
     console.error('Error in OpenAIStream:', error.message);
     throw error;
