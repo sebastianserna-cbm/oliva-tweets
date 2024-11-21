@@ -17,7 +17,6 @@ const handler = async (req: Request): Promise<Response> => {
   try {
     const { model, messages, key, prompt, temperature } = (await req.json()) as ChatBody;
 
-    // Initialize Tiktoken
     await init((imports) => WebAssembly.instantiate(wasm, imports));
     const encoding = new Tiktoken(
       tiktokenModel.bpe_ranks,
@@ -25,22 +24,25 @@ const handler = async (req: Request): Promise<Response> => {
       tiktokenModel.pat_str,
     );
 
-    // Ensure prompt and temperature are set
-    const promptToSend = prompt || DEFAULT_SYSTEM_PROMPT;
-    const temperatureToUse = temperature ?? DEFAULT_TEMPERATURE;
+    let promptToSend = prompt;
+    if (!promptToSend) {
+      promptToSend = DEFAULT_SYSTEM_PROMPT;
+    }
 
-    // Encode the system prompt
-    const promptTokens = encoding.encode(promptToSend);
+    let temperatureToUse = temperature;
+    if (temperatureToUse == null) {
+      temperatureToUse = DEFAULT_TEMPERATURE;
+    }
 
-    let tokenCount = promptTokens.length;
+    const prompt_tokens = encoding.encode(promptToSend);
+
+    let tokenCount = prompt_tokens.length;
     let messagesToSend: Message[] = [];
 
-    // Backward traversal to add messages within the token limit
     for (let i = messages.length - 1; i >= 0; i--) {
       const message = messages[i];
       const tokens = encoding.encode(message.content);
 
-      // Stop adding messages if token limit is exceeded
       if (tokenCount + tokens.length + 1000 > model.tokenLimit) {
         break;
       }
@@ -50,31 +52,16 @@ const handler = async (req: Request): Promise<Response> => {
 
     encoding.free();
 
-    // Log the prepared data for debugging
-    console.log('Prompt to send:', promptToSend);
-    console.log('Messages to send:', messagesToSend);
-    console.log('Token count:', tokenCount);
-
-    // Send request to OpenAIStream
     const stream = await OpenAIStream(model, promptToSend, temperatureToUse, key, messagesToSend);
 
     return new Response(stream);
   } catch (error) {
-    console.error('Error in chat handler:', error);
-
-    // Handle OpenAI-specific errors
+    console.error(error);
     if (error instanceof OpenAIError) {
-      return new Response(JSON.stringify({ error: error.message }), {
-        status: 500,
-        headers: { 'Content-Type': 'application/json' },
-      });
+      return new Response('Error', { status: 500, statusText: error.message });
+    } else {
+      return new Response('Error', { status: 500 });
     }
-
-    // Handle other unexpected errors
-    return new Response(JSON.stringify({ error: 'Internal server error' }), {
-      status: 500,
-      headers: { 'Content-Type': 'application/json' },
-    });
   }
 };
 
